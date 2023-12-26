@@ -1,30 +1,26 @@
 package com.niko.weatherapp.Fragments
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Bundle
 import android.util.Log
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.TableLayout
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.activityViewModels
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.LifecycleOwner
 import com.android.volley.Request
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
 import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -34,7 +30,6 @@ import com.niko.weatherapp.CONSTANCE
 import com.niko.weatherapp.Model.MainViewModel
 import com.niko.weatherapp.Model.WeatherItemModel
 import com.niko.weatherapp.R
-import com.niko.weatherapp.databinding.AlertDialogBinding
 import com.niko.weatherapp.databinding.FragmentMainBinding
 import com.squareup.picasso.Picasso
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +38,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 class MainFragment : Fragment() {
+    private var defaultCity: String = "Moscow"
     private lateinit var fLocationClient: FusedLocationProviderClient
     private val flist = listOf(HoursFragment.newInstance(), DaysFragment.newInstance())
     private lateinit var bind: FragmentMainBinding
@@ -65,10 +61,10 @@ class MainFragment : Fragment() {
 
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
         CoroutineScope(Dispatchers.IO).launch {
-            requestWeatherData("Moscow")
+            getCurrentLocation()
         }
 
     }
@@ -77,14 +73,14 @@ class MainFragment : Fragment() {
         plauncher = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) {
-            Toast.makeText(activity, "Permission is $it", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, "$it", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun checkPermission() {
-        if (!isPermissionGranted(android.Manifest.permission.ACCESS_FINE_LOCATION)) {
+        if (!isPermissionGranted(Manifest.permission.ACCESS_FINE_LOCATION)) {
             permissionLauncher()
-            plauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            plauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
 
     }
@@ -100,8 +96,38 @@ class MainFragment : Fragment() {
         }.attach()
         btnSynch.setOnClickListener {
             CoroutineScope(Dispatchers.IO).launch {
-                requestWeatherData("Moscow")
+                getCurrentLocation()
             }
+        }
+    }
+
+    private fun isLocationEnabled() : Boolean{
+        val locManager = activity?.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return locManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    }
+
+    private fun getCurrentLocation() {
+        if(!isLocationEnabled())
+        {
+            requestWeatherData(defaultCity)
+        }
+        else {
+            val ct = CancellationTokenSource()
+            if (ActivityCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestWeatherData(defaultCity)
+            } else
+                fLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, ct.token)
+                    .addOnCompleteListener {
+                        requestWeatherData("${it.result.latitude},${it.result.longitude}")
+                        Log.e("EE","${it.result.latitude},${it.result.longitude}")
+                    }
         }
     }
 
