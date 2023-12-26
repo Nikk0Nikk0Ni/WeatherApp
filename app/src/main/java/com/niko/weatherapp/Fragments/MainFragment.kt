@@ -126,7 +126,7 @@ class MainFragment : Fragment() {
                 fLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, ct.token)
                     .addOnCompleteListener {
                         requestWeatherData("${it.result.latitude},${it.result.longitude}")
-                        Log.e("EE","${it.result.latitude},${it.result.longitude}")
+                        Log.e("E","${it.result.latitude},${it.result.longitude}")
                     }
         }
     }
