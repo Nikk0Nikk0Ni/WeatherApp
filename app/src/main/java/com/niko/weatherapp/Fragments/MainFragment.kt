@@ -2,15 +2,15 @@ package com.niko.weatherapp.Fragments
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Bundle
-import android.util.Log
+import android.provider.Settings
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
@@ -27,14 +27,12 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.material.tabs.TabLayoutMediator
 import com.niko.weatherapp.Adapters.ViewPageAdapter
 import com.niko.weatherapp.CONSTANCE
+import com.niko.weatherapp.DialogManager
 import com.niko.weatherapp.Model.MainViewModel
 import com.niko.weatherapp.Model.WeatherItemModel
 import com.niko.weatherapp.R
 import com.niko.weatherapp.databinding.FragmentMainBinding
 import com.squareup.picasso.Picasso
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 class MainFragment : Fragment() {
@@ -58,23 +56,18 @@ class MainFragment : Fragment() {
         checkPermission()
         init()
         updateCurrentCard()
-
     }
 
     override fun onResume() {
         super.onResume()
-        CoroutineScope(Dispatchers.IO).launch {
-            getCurrentLocation()
-        }
+        checkLocation()
 
     }
 
     private fun permissionLauncher() {
         plauncher = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
-        ) {
-            Toast.makeText(activity, "$it", Toast.LENGTH_SHORT).show()
-        }
+        ) {}
     }
 
     private fun checkPermission() {
@@ -95,40 +88,53 @@ class MainFragment : Fragment() {
             tab.text = tabnamelist[position]
         }.attach()
         btnSynch.setOnClickListener {
-            CoroutineScope(Dispatchers.IO).launch {
-                getCurrentLocation()
+            checkLocation()
+        }
+        btnSearch.setOnClickListener {
+            DialogManager.serachByCity(requireContext()){
+                    it : String? ->
+                it?.let { it1 -> requestWeatherData(it1) }
             }
         }
     }
 
-    private fun isLocationEnabled() : Boolean{
+    private fun isLocationEnabled(): Boolean {
         val locManager = activity?.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         return locManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
     }
 
+    private fun checkLocation() {
+        if (!isLocationEnabled()) {
+            DialogManager.localSettingsDialog(requireContext(), object : DialogManager.Listenner {
+                override fun onOkClick() {
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }
+
+                override fun onNoClick() {
+                    requestWeatherData(defaultCity)
+                }
+            })
+        } else {
+            getCurrentLocation()
+        }
+    }
+
     private fun getCurrentLocation() {
-        if(!isLocationEnabled())
-        {
+        val ct = CancellationTokenSource()
+        if (ActivityCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestWeatherData(defaultCity)
-        }
-        else {
-            val ct = CancellationTokenSource()
-            if (ActivityCompat.checkSelfPermission(
-                    requireContext(),
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                    requireContext(),
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                requestWeatherData(defaultCity)
-            } else
-                fLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, ct.token)
-                    .addOnCompleteListener {
-                        requestWeatherData("${it.result.latitude},${it.result.longitude}")
-                        Log.e("E","${it.result.latitude},${it.result.longitude}")
-                    }
-        }
+        } else
+            fLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, ct.token)
+                .addOnCompleteListener {
+                    requestWeatherData("${it.result.latitude},${it.result.longitude}")
+                }
     }
 
     private fun updateCurrentCard() = with(bind)
